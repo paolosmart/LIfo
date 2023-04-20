@@ -1,0 +1,121 @@
+# Importo le librerie necessarie
+import pandas as pd
+import numpy as np
+
+# Leggo i due file csv e li salvo in due dataframe
+positions = pd.read_csv("positions.csv")
+rendicontazione = pd.read_csv("rendicontazione.csv")
+
+# Creo una colonna per il valore totale delle posizioni iniziali
+positions["Value"] = positions["Quantity"] * positions["TradePrice"]
+
+# Creo una lista vuota per salvare i risultati
+results = []
+
+# Per ogni simbolo nel file positions
+for symbol in positions["Symbol"].unique():
+    # Filtro i dataframe per il simbolo corrente
+    pos = positions[positions["Symbol"] == symbol]
+    ren = rendicontazione[rendicontazione["Symbol"] == symbol]
+
+    # Ordino il dataframe rendicontazione in ordine cronologico inverso
+    ren = ren.sort_values(by="SettleDateTarget", ascending=False)
+
+    # Inizializzo le variabili per il calcolo del Lifo
+    lifo_gain = 0
+    lifo_loss = 0
+    lifo_quantity = pos["Quantity"].sum()
+
+    # Se la posizione iniziale è long, il prezzo medio è il prezzo di acquisto iniziale
+    if pos["Side"].iloc[0] == "Long":
+        lifo_price = pos["TradePrice"].mean()
+        lifo_side = "Long"
+
+    # Se la posizione iniziale è short, il prezzo medio è il prezzo di vendita iniziale
+    elif pos["Side"].iloc[0] == "Short":
+        lifo_price = pos["TradePrice"].mean()
+        lifo_side = "Short"
+
+    # Per ogni riga nel dataframe rendicontazione
+    for index, row in ren.iterrows():
+        # Se la riga corrisponde a una vendita
+        if row["Buy/Sell"] == "Sell":
+            # Calcolo la quantità venduta e il prezzo medio di vendita
+            sell_quantity = row["Quantity"]
+            sell_price = row["Trade_Price"]
+
+            # Se la quantità venduta è minore o uguale alla quantità rimasta nel Lifo
+            if sell_quantity <= lifo_quantity:
+                # Calcolo il guadagno o la perdita realizzata con la vendita
+                gain_loss = (sell_price - lifo_price) * sell_quantity
+
+                # Se la posizione iniziale è long, il guadagno o perdita ha lo stesso segno
+                if lifo_side == "Long":
+                    pass
+
+                # Se la posizione iniziale è short, il guadagno o perdita ha il segno opposto
+                elif lifo_side == "Short":
+                    gain_loss = -gain_loss
+
+                # Aggiorno il Lifo gain o loss in base al segno del guadagno o perdita
+                if gain_loss > 0:
+                    lifo_gain += gain_loss
+                else:
+                    lifo_loss += gain_loss
+
+                # Aggiorno la quantità rimasta nel Lifo
+                lifo_quantity -= sell_quantity
+
+            # Se la quantità venduta è maggiore della quantità rimasta nel Lifo
+            else:
+                # Calcolo il guadagno o la perdita realizzata con la vendita della quantità rimasta nel Lifo
+                gain_loss = (sell_price - lifo_price) * lifo_quantity
+
+                # Se la posizione iniziale è long, il guadagno o perdita ha lo stesso segno
+                if lifo_side == "Long":
+                    pass
+
+                # Se la posizione iniziale è short, il guadagno o perdita ha il segno opposto
+                elif lifo_side == "Short":
+                    gain_loss = -gain_loss
+
+                # Aggiorno il Lifo gain o loss in base al segno del guadagno o perdita
+                if gain_loss > 0:
+                    lifo_gain += gain_loss
+                else:
+                    lifo_loss += gain_loss
+
+                # Cambio il side del Lifo da long a short e calcolo il prezzo medio in base al prezzo di vendita della transazione che ha causato il cambio di posizione
+                lifo_side = "Short"
+                lifo_price = sell_price
+                lifo_quantity = sell_quantity - lifo_quantity
+
+                # Se la riga corrisponde a un acquisto
+        elif row["Buy/Sell"] == "Buy":
+            # Calcolo la quantità acquistata e il prezzo medio di acquisto
+            buy_quantity = row["Quantity"]
+            buy_price = row["Trade_Price"]
+
+            # Se la quantità acquistata è minore o uguale alla quantità rimasta nel Lifo
+            if buy_quantity <= lifo_quantity:
+                # Aggiorno la quantità e il prezzo medio nel Lifo con la formula della media ponderata
+                lifo_quantity -= buy_quantity
+                lifo_price = (lifo_price * (lifo_quantity + buy_quantity) - buy_price * buy_quantity) / lifo_quantity
+
+            # Se la quantità acquistata è maggiore della quantità rimasta nel Lifo
+            else:
+                # Cambio il side del Lifo da short a long e calcolo il prezzo medio in base al prezzo di acquisto della transazione che ha causato il cambio di posizione
+                lifo_side = "Long"
+                lifo_price = buy_price
+                lifo_quantity = buy_quantity - lifo_quantity
+
+            # Creo un dizionario con i risultati per il simbolo corrente e lo aggiungo alla lista dei risultati
+        result = {"Symbol": symbol, "Lifo Gain": lifo_gain, "Lifo Loss": lifo_loss}
+        results.append(result)
+
+    # Creo un dataframe finale con i risultati e lo salvo in un file csv
+    results_df = pd.DataFrame(results)
+    results_df.to_csv("results.csv", index=False)
+
+    # Stampo il dataframe finale
+    print(results_df)
