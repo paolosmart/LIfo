@@ -111,6 +111,7 @@ for index, row in transazioni.iterrows():
                 posizioni.at[index, 'HoldingPeriodDateTime'] = row['SettleDateTarget']
 
 # Chiamo la funzione con i parametri capital_gain_loss e posizioni
+
 print('TradePrice' in posizioni.keys())
 print(posizioni.columns)
 print(posizioni.dtypes)
